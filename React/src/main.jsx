@@ -1113,6 +1113,18 @@ function Modal({ modal, close, data, user, onLogin, onSaved, onAdd }) {
               is_active: item.is_active ?? true,
             };
   const [values, setValues] = useState(initial);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const fileInput = useRef(null);
+  useEffect(() => {
+    if (!imageFile) {
+      setImagePreview(values.thumbnail || "");
+      return;
+    }
+    const objectUrl = URL.createObjectURL(imageFile);
+    setImagePreview(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [imageFile, values.thumbnail]);
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1183,6 +1195,7 @@ function Modal({ modal, close, data, user, onLogin, onSaved, onAdd }) {
         ) : (
           <input
             type={inputType}
+            disabled={options.disabled}
             value={values[key]}
             onChange={(e) => set(key, e.target.value)}
             required={options.required !== false}
@@ -1225,10 +1238,21 @@ function Modal({ modal, close, data, user, onLogin, onSaved, onAdd }) {
           type === "listing"
             ? `shops/${values.shop_id}/listings`
             : { product: "products", shop: "shops", owner: "owners" }[type];
+        let payload = values;
+        if (imageFile) {
+          payload = new FormData();
+          Object.entries(values).forEach(([key, value]) =>
+            payload.append(
+              key,
+              typeof value === "boolean" ? (value ? "1" : "0") : (value ?? ""),
+            ),
+          );
+          payload.append("thumbnail_file", imageFile);
+        }
         await api(
           `${resource}${item.id ? `/${item.id}` : ""}`,
           item.id ? "PUT" : "POST",
-          values,
+          payload,
         );
         onSaved();
       }
@@ -1388,11 +1412,69 @@ function Modal({ modal, close, data, user, onLogin, onSaved, onAdd }) {
                   {field("price", "Price (USD)", "number", {
                     wide: type === "listing",
                   })}
-                  {field("thumbnail", "Thumbnail image URL", "url", {
-                    required: false,
-                    wide: true,
-                    placeholder: "https://example.com/product.jpg",
-                  })}
+                  <div className="image-inputs full-width">
+                    <label className="form-field">
+                      <span>Upload product image</span>
+                      <input
+                        ref={fileInput}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null;
+                          if (file && file.size > 2 * 1024 * 1024) {
+                            setErrors((current) => ({
+                              ...current,
+                              thumbnail_file: [
+                                "Choose an image no larger than 2 MB.",
+                              ],
+                            }));
+                            event.target.value = "";
+                            setImageFile(null);
+                            return;
+                          }
+                          setErrors((current) => ({
+                            ...current,
+                            thumbnail_file: undefined,
+                          }));
+                          setImageFile(file);
+                        }}
+                      />
+                      <small>
+                        JPG, PNG, WebP or GIF, up to 2 MB. Choose a file or
+                        enter a URL below.
+                      </small>
+                      {errors.thumbnail_file && (
+                        <small className="field-error">
+                          {errors.thumbnail_file[0]}
+                        </small>
+                      )}
+                    </label>
+                    {imageFile && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => {
+                          setImageFile(null);
+                          if (fileInput.current) fileInput.current.value = "";
+                        }}
+                      >
+                        <X size={14} /> Clear selected file
+                      </button>
+                    )}
+                    {field("thumbnail", "Thumbnail image URL", "url", {
+                      required: false,
+                      wide: true,
+                      disabled: Boolean(imageFile),
+                      placeholder: "https://example.com/product.jpg",
+                    })}
+                    {imagePreview && (
+                      <ProductImage
+                        src={imagePreview}
+                        name="Product image preview"
+                        className="image-upload-preview"
+                      />
+                    )}
+                  </div>
                   {field("description", "Product details", "textarea", {
                     wide: true,
                   })}

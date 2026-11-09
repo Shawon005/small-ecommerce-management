@@ -29,6 +29,7 @@ cd small-ecommerce-management
    php artisan key:generate
    php -r "file_exists('database/database.sqlite') || touch('database/database.sqlite');"
    php artisan migrate --seed
+   php artisan storage:link
    ```
 
    The example configuration uses SQLite with database-backed sessions and cache. All required tables are included in migrations. The seed command can be run again without duplicating demo records or resetting existing passwords.
@@ -97,7 +98,7 @@ Continue opening the application at port **8000**. Vite provides hot reload thro
 ## Assessment walkthrough
 
 1. Sign in as administrator. Create an owner under **Shop owners**, then create a shop under **Shops** and assign that owner. Shop name, slug, description, owner, and visibility can be edited.
-2. Create a product in **Shared catalog**. Supply its name, unique SKU, category, default price, details, and optional HTTP/HTTPS thumbnail URL. New products are available to every signed-in owner immediately, but remain absent from the customer collection until listed.
+2. Create a product in **Shared catalog**. Supply its name, unique SKU, category, default price, details, and optionally upload an image or enter an HTTP/HTTPS thumbnail URL. Uploads accept JPG, PNG, WebP, or GIF up to 2 MB and take priority over a URL. Both options include an image preview and are available when creating or editing catalog products and shop listings. New products are available to every signed-in owner immediately, but remain absent from the customer collection until listed.
 3. Sign in as an owner. Browse **Shared catalog**, choose **Add to shop**, select one of your shops, and customize its name, details, price, image URL, and visibility. The same catalog product can be added to multiple shops, once per shop.
 4. Use **Shop listings** to edit, hide, or remove a listing. These changes affect only that shop. Owners can also create products and edit their own catalog products; administrators can edit and delete any catalog product.
 5. Open **View storefront**, filter by shop/category, search by product name, and open product details. Only active listings in active shops are returned. The seed catalog includes **Weekend Ceramic Vase** without a listing to demonstrate this rule, and a mug listed at **$24** in The Home Edit and **$26** in Slow Studio to demonstrate independent pricing.
@@ -116,7 +117,7 @@ shops ──< listings >── products
 - All management endpoints require authentication. Admin operations and shop ownership are checked on the server, including nested listing IDs; changing a URL cannot grant access to another owner's shop.
 - Authentication uses Laravel sessions, hashed passwords, session rotation, CSRF protection, and login throttling. No tokens are stored in local storage. Account creation is admin-only and cannot assign the admin role through the owner endpoint.
 - Deleting a listing preserves its catalog product. Deleting a shop removes its listings. Deleting a catalog product removes its listings from every shop after a confirmation in the UI. An owner with assigned shops cannot be deleted until the shops are reassigned or removed.
-- Customer browsing is read-only. Checkout, orders, inventory quantities, and payment processing are outside the supplied assessment scope. Images are configured by URL; binary file uploads are not required.
+- Customer browsing is read-only. Checkout, orders, inventory quantities, and payment processing are outside the supplied assessment scope. Images support both file uploads and external URLs. Uploaded files are stored in `Laravel/storage/app/public/product-images` and served through `Laravel/public/storage`; run `php artisan storage:link` during setup and deployment. Keep uploaded images and the application's public URL available when moving between environments.
 
 ## Tests
 

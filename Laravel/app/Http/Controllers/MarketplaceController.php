@@ -12,6 +12,18 @@ use Illuminate\Validation\Rule;
 
 class MarketplaceController extends Controller
 {
+    private function storeThumbnail(Request $request, array $data): array
+    {
+        unset($data['thumbnail_file']);
+        if ($request->hasFile('thumbnail_file')) {
+            $path = $request->file('thumbnail_file')->store('product-images', 'public');
+            abort_unless($path, 500, 'Could not save the image. Please try again.');
+            $data['thumbnail'] = url('/storage/'.$path);
+        }
+
+        return $data;
+    }
+
     private function admin(Request $r): void
     {
         abort_unless($r->user()->role === 'admin', 403, 'Administrator access required.');
@@ -136,7 +148,9 @@ class MarketplaceController extends Controller
             'category' => 'required|string|max:80', 'description' => 'required|string|max:5000',
             'price' => 'required|numeric|min:0|max:9999999999.99|decimal:0,2',
             'thumbnail' => 'nullable|url:http,https|max:2048',
+            'thumbnail_file' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:2048',
         ]);
+        $data = $this->storeThumbnail($r, $data);
         if ($product) {
             $product->update($data);
         } else {
@@ -163,8 +177,10 @@ class MarketplaceController extends Controller
             'name' => 'required|string|max:150', 'description' => 'required|string|max:5000',
             'price' => 'required|numeric|min:0|max:9999999999.99|decimal:0,2',
             'thumbnail' => 'nullable|url:http,https|max:2048', 'is_active' => 'required|boolean',
+            'thumbnail_file' => 'nullable|image|mimes:jpg,jpeg,png,webp,gif|max:2048',
         ]);
         abort_if($listing && $listing->product_id !== (int) $data['product_id'], 422, 'A listing cannot switch catalog products.');
+        $data = $this->storeThumbnail($r, $data);
         if ($listing) {
             $listing->update($data);
         } else {

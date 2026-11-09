@@ -1,4 +1,28 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap");
+.image-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.image-inputs .form-field small {
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.image-inputs .form-field .field-error {
+  color: #b05e48;
+}
+.image-inputs input:disabled {
+  opacity: 0.55;
+  background: #f2f4ee;
+}
+.image-upload-preview {
+  width: 112px;
+  height: 112px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
 :root {
   font-family: "DM Sans", sans-serif;
   color: #263c32;

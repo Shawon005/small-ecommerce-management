@@ -6,7 +6,9 @@ use App\Models\Product;
 use App\Models\Shop;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class MarketplaceTest extends TestCase
@@ -51,6 +53,53 @@ class MarketplaceTest extends TestCase
         $this->getJson('/api/storefront')->assertOk()->assertJsonPath('listings.total', 0)->assertDontSee('Catalog Mug');
         $this->getJson('/api/dashboard')->assertUnauthorized();
         $this->postJson('/api/products', $this->productData())->assertUnauthorized();
+    }
+
+    private function imageUpload(): UploadedFile
+    {
+        return UploadedFile::fake()->createWithContent('product.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='));
+    }
+
+    public function test_products_support_uploads_replacement_and_switching_back_to_urls(): void
+    {
+        Storage::fake('public');
+        $this->actingAs($this->owner);
+        $payload = $this->productData(['sku' => 'UPLOAD-001']);
+        $created = $this->post('/api/products', $payload + ['thumbnail_file' => $this->imageUpload()], ['Accept' => 'application/json'])->assertOk();
+        $id = $created->json('id');
+        $url = $created->json('thumbnail');
+        $this->assertStringContainsString('/storage/product-images/', $url);
+        Storage::disk('public')->assertExists('product-images/'.basename($url));
+        $this->putJson("/api/products/{$id}", array_replace($payload, ['thumbnail' => $url, 'price' => '33.00']))->assertOk()->assertJsonPath('thumbnail', $url);
+        $updated = $this->post("/api/products/{$id}", $payload + ['_method' => 'PUT', 'thumbnail_file' => $this->imageUpload()], ['Accept' => 'application/json'])->assertOk();
+        $this->assertNotSame($url, $updated->json('thumbnail'));
+        $this->putJson("/api/products/{$id}", $payload)->assertOk()->assertJsonPath('thumbnail', 'https://example.com/catalog.jpg');
+    }
+
+    public function test_listing_uploads_are_independent_and_can_reuse_catalog_uploads(): void
+    {
+        Storage::fake('public');
+        $created = $this->actingAs($this->admin)->post('/api/products', $this->productData(['sku' => 'UPLOAD-002']) + ['thumbnail_file' => $this->imageUpload()], ['Accept' => 'application/json'])->assertOk();
+        $catalogUrl = $created->json('thumbnail');
+        $payload = $this->listingData(['product_id' => $created->json('id'), 'thumbnail' => $catalogUrl]);
+        $listing = $this->actingAs($this->owner)->postJson("/api/shops/{$this->shop->id}/listings", $payload)->assertOk();
+        $id = $listing->json('id');
+        $updated = $this->post("/api/shops/{$this->shop->id}/listings/{$id}", $payload + ['_method' => 'PUT', 'thumbnail_file' => $this->imageUpload()], ['Accept' => 'application/json'])->assertOk();
+        $this->assertNotSame($catalogUrl, $updated->json('thumbnail'));
+        Storage::disk('public')->assertExists('product-images/'.basename($updated->json('thumbnail')));
+        $this->assertSame($catalogUrl, Product::findOrFail($created->json('id'))->thumbnail);
+        $this->getJson('/api/storefront')->assertJsonPath('listings.data.0.thumbnail', $updated->json('thumbnail'));
+    }
+
+    public function test_invalid_or_unauthorized_uploads_are_not_stored(): void
+    {
+        Storage::fake('public');
+        $this->actingAs($this->owner);
+        foreach ([UploadedFile::fake()->createWithContent('fake.jpg', '<?php echo 1;')->mimeType('text/x-php'), UploadedFile::fake()->create('too-large.png', 2049, 'image/png'), UploadedFile::fake()->createWithContent('unsafe.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>')] as $file) {
+            $this->post('/api/products', $this->productData(['sku' => 'INVALID-IMAGE']) + ['thumbnail_file' => $file], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('thumbnail_file');
+        }
+        $this->post("/api/shops/{$this->otherShop->id}/listings", $this->listingData() + ['thumbnail_file' => $this->imageUpload()], ['Accept' => 'application/json'])->assertForbidden();
+        $this->assertSame([], Storage::disk('public')->allFiles());
     }
 
     public function test_login_logout_and_invalid_credentials(): void

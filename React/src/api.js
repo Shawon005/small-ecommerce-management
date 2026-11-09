@@ -1,15 +1,19 @@
 let csrf = "";
 export async function api(path, method = "GET", body, retry = true) {
   if (method !== "GET" && !csrf) await api("session");
+  const multipart = body instanceof FormData;
+  if (multipart && method === "PUT") body.set("_method", "PUT");
   const response = await fetch(`/api/${path}`, {
-    method,
+    method: multipart && method === "PUT" ? "POST" : method,
     credentials: "same-origin",
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(multipart ? {} : { "Content-Type": "application/json" }),
       "X-CSRF-TOKEN": csrf,
     },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : { body: multipart ? body : JSON.stringify(body) }),
   });
   if (response.status === 204) return null;
   if (response.status === 419 && retry) {

@@ -1,5 +1,14 @@
 import { test, expect } from "@playwright/test";
 
+const uploadImage = {
+  name: "product.png",
+  mimeType: "image/png",
+  buffer: Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+    "base64",
+  ),
+};
+
 async function login(page, email = "admin@example.com") {
   await page.goto("/");
   await page.getByRole("button", { name: /Shop owner sign in/ }).click();
@@ -110,6 +119,9 @@ test("administrator can create, edit and remove an owner, shop and catalog produ
     .click();
   await page.getByLabel("Product name").fill(`Browser Product ${suffix}`);
   await page.getByLabel("Unique SKU").fill(`BROWSER-${suffix}`);
+  await page.getByLabel("Upload product image").setInputFiles(uploadImage);
+  await expect(page.getByLabel("Thumbnail image URL")).toBeDisabled();
+  await expect(page.getByAltText("Product image preview")).toBeVisible();
   await page.getByLabel("Price (USD)").fill("17.50");
   await page
     .getByLabel("Product details")
@@ -120,7 +132,21 @@ test("administrator can create, edit and remove an owner, shop and catalog produ
     .locator(".product-card")
     .filter({ hasText: `Browser Product ${suffix}` });
   await expect(card).toBeVisible();
+  await expect(
+    card.getByRole("img", { name: `Browser Product ${suffix}`, exact: true }),
+  ).toHaveAttribute("src", /\/storage\/product-images\//);
+  await expect
+    .poll(() =>
+      card
+        .getByRole("img", { name: `Browser Product ${suffix}`, exact: true })
+        .evaluate((image) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
   await card.getByTitle("Edit catalog product").click();
+  await expect(page.getByLabel("Thumbnail image URL")).toHaveValue(
+    /\/storage\/product-images\//,
+  );
+  await page.getByLabel("Upload product image").setInputFiles(uploadImage);
   await page.getByLabel("Price (USD)").fill("18.00");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -170,6 +196,10 @@ test("shop owner adds a shared product, changes its local price and visibility, 
     page.getByRole("heading", { name: "Create shop listing" }),
   ).toBeVisible();
   await page.getByLabel("Product name").fill("Owner Custom Vase");
+  await page.getByLabel("Upload product image").setInputFiles(uploadImage);
+  await page.getByRole("button", { name: "Clear selected file" }).click();
+  await expect(page.getByLabel("Thumbnail image URL")).toBeEnabled();
+  await page.getByLabel("Upload product image").setInputFiles(uploadImage);
   await page.getByLabel("Price (USD)").fill("39.99");
   await page
     .getByLabel("Product details")
